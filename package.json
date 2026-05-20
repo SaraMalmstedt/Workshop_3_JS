@@ -1,0 +1,27 @@
+{
+  "name": "workshop_3_js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SaraMalmstedt/Workshop_3_JS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/SaraMalmstedt/Workshop_3_JS/issues"
+  },
+  "homepage": "https://github.com/SaraMalmstedt/Workshop_3_JS#readme",
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "express": "^5.2.1",
+    "jsdom": "^29.1.1",
+    "socket.io": "^4.8.3"
+  }
+}
