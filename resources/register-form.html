@@ -1,0 +1,16 @@
+<form method="POST" action="/play" class="text-left container pt-5" enctype="application/x-www-form-urlencoded"> 
+    <h1>Ange dina uppgifter</h1>  
+    <h4 id="error" class="text-white bg-warning"></h4>                       
+    <div class="form-group">
+        <label for="nickname">Namn (minst 5 tecken):</label>
+        <input type="text" class="form-control" id="nickname" name="nickname" required>
+    </div>
+    <div class="form-group">
+        <label for="speed">Ange hur snabb bollen ska vara:</label>
+        <br>
+        <input type="range" id="speed" name="speed" class="w-100" min="1" max="5" value="3" required>
+    </div>
+    <div class="text-right">                 
+        <button type="submit" class="btn btn-primary mr-0">Börja spela!</button>                  
+    </div>
+</form>
