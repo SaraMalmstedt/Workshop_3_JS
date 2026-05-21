@@ -65,6 +65,7 @@ app.post('/play', function (request, response) {
         if (nickname.length < 6) {
             throw { 'errorMsg': 'nickname måste vara minst 6 tecken långt!' };
         }
+        //!! Här borde man kontrollera om stränglägden på speed är tomt !!
 
         if (!utils.isNumber(speed)) { // isNumber är en funktion från filen utils som kontrollerar om det är ett heltal 
             throw { 'errorMsg': 'speed måste vara ett heltal' };
@@ -74,6 +75,19 @@ app.post('/play', function (request, response) {
 
         if (speed < 1 || speed > 5) {
             throw { 'errorMsg': 'speed måste vara ett heltal mellan 1-5' };
+        }
+
+        //Kontrollera så spelare 1 och spelare 2 har olika namn
+        if (player.playerOneNick !== null && player.playerOneNick === nickname) {
+            throw { 'errorMsg': 'nickname måste vara olika!' };
+        }
+
+        if (player.playerOneNick !== null) { //Om ettan är skillt från null blir det tvåan
+            player.playerTwoNick = nickname;
+            player.playerTwoSpeed = speed;
+        } else {
+            player.playerOneNick = nickname;
+            player.playerOneSpeed = speed;
         }
 
     } catch (exeption) {
