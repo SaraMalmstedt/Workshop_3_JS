@@ -20,10 +20,14 @@ let expressServer = app.listen(3000, function () {
     console.log('Servern körs på port 3000');
 });
 
+//Dubbelriktad kommunikation
+const io = require('socket.io')(expressServer); //inte importera http, bara express
+
 app.use(cookieParser());
 app.use('/public', express.static(__dirname + '/clientCode'));
 
 app.use(express.urlencoded({ extended: true }));
+
 
 
 app.get('/', function (request, response) {
@@ -44,6 +48,8 @@ app.get('/', function (request, response) {
     response.send(dom.serialize()); //trycker tillbaka till klienten
 
 });
+
+
 
 app.post('/play', function (request, response) {
 
@@ -115,8 +121,11 @@ app.post('/play', function (request, response) {
         dom.window.document.querySelector('main').innerHTML = htmlSnippet;
         dom.window.document.querySelector('#error').textContent = exeption.errorMsg
 
-        response.send(dom.serialize()); //trycker tillbaka till klienten
+        //Här borde vi kontrollera så att dess inte består av undefined 
+        dom.window.document.querySelector('#nickname').setAttribute('value', request.body.nickname); //Tänk hårdkodad HTML kod!
+        dom.window.document.querySelector('#speed').setAttribute('value', request.body.speed);
 
+        response.send(dom.serialize()); //trycker tillbaka till klienten
 
     }
 });
@@ -130,6 +139,19 @@ app.post('/play', function (request, response) {
 
 
 
+io.on('connection', function (socket) {
+    let cookieString = socket.handshake.headers.cookie;
+    let list = utils.parseCookies(cookieString); //blir ett json objekt 
+
+    console.log(cookieString, list)
+
+    // Kan det finnas buggar här?
+    if (list.player === '1') {
+        player.playerOneSocketId = socket.id;
+    } else {
+        player.playerTwoSocketId = socket.id;
+    }
+});
 //NEDAN KOMMER I EFTERMIDDAG
 /*
 //Ta emot changedirection-händelse från klient
