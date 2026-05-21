@@ -23,14 +23,65 @@ let expressServer = app.listen(3000, function () {
 app.use(cookieParser());
 app.use('/public', express.static(__dirname + '/clientCode'));
 
-app.use(express.urlencoded({ extended: True }));
+app.use(express.urlencoded({ extended: true }));
 
-app.get('/', function () {
 
+app.get('/', function (request, response) {
+
+    //Borde vara i en try/catch, eller istället readFile med callback osv. 
     let basePage = fs.readFileSync(__dirname + '/resources/basepage.html');
-    let htmlSnippet = 
+    let htmlSnippet = fs.readFileSync(__dirname + '/resources/register-form.html')
 
-})
+    // Skapar en virtuell DOM av HTML-strängen med jsdom.
+    // Används för att manipulera HTML på serversidan innan den skickas till klienten.
+    // Viktigt: använd alltid setAttribute() för att sätta värden på element — inte .value
+    // .value fungerar inte med jsdom eftersom det är en dynamisk egenskap som inte
+    // serialiseras tillbaka till HTML-strängen när man anropar dom.serialize().
+    let dom = new jsdom.JSDOM(basePage);
+
+    dom.window.document.querySelector('main').innerHTML = htmlSnippet;
+
+    response.send(dom.serialize()); //trycker tillbaka till klienten
+
+});
+
+app.post('/play', function (request, response) {
+
+    try {
+        // kontrollera att kroppen finns, kommer det något tillbaka till servern överhuvudtaget 
+        if (request.body === undefined) { // om det är sant kommer inget in 
+            throw { 'errorMsg': 'Ingen data till servern!' }; // (Object literal)
+        }
+
+        if (request.body.nickname === undefined || request.body.speed === undefined) { //Kontrollerar om det finns någon data att hämta överhuvudtaget?
+            throw { 'errorMsg': 'Ange nickname och speed!' };
+        }
+
+        //plockar ut nickname och speed och ger dem variabler 
+        let nickname = request.body.nickname;
+        let speed = request.body.speed;
+
+        // kontrollera om nickname är kortare än 6 tecken 
+        if (nickname.length < 6) {
+            throw { 'errorMsg': 'nickname måste vara minst 6 tecken långt!' };
+        }
+
+        if (!utils.isNumber(speed)) { // isNumber är en funktion från filen utils som kontrollerar om det är ett heltal 
+            throw { 'errorMsg': 'speed måste vara ett heltal' };
+        }
+
+        speed = parseInt(speed); //konverterar speed till ett heltal 
+
+        if (speed < 1 || speed > 5) {
+            throw { 'errorMsg': 'speed måste vara ett heltal mellan 1-5' };
+        }
+
+    } catch (exeption) {
+
+        response.send(exeption.errorMsg);
+
+    }
+});
 
 //EXTRA INFO
 // Läs in textfiler med antingen fs.readFileSync() (synkront) eller fs.readFile() (asynkront).
