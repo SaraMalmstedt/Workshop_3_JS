@@ -82,10 +82,12 @@ app.post('/play', function (request, response) {
             throw { 'errorMsg': 'nickname måste vara olika!' };
         }
 
-        if (player.playerOneNick !== null) { //Om ettan är skillt från null blir det tvåan
+        if (player.playerOneNick !== null) { //Om ettan är skilt från null blir det tvåan
             player.playerTwoNick = nickname;
             player.playerTwoSpeed = speed;
+            response.cookie('player', '2', { maxAge: 60 * 60 * 1000 }); //default är att klienten kan manipulera cookies så här behövs inte göra nåt 
         } else {
+            //Borde kontrllera mot att både spelare 1 och 2 redan är med i spelet
             player.playerOneNick = nickname;
             player.playerOneSpeed = speed;
         }
