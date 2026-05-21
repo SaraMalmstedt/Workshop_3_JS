@@ -88,14 +88,35 @@ app.post('/play', function (request, response) {
             response.cookie('player', '2', { maxAge: 60 * 60 * 1000, httpOnly: false }); //default är att klienten kan manipulera cookies så här behövs inte göra nåt 
         } else {
             //Borde kontrllera mot att både spelare 1 och 2 redan är med i spelet
+            // För vad händer när spelare 3 ansluter?
             player.playerOneNick = nickname;
             player.playerOneSpeed = speed;
             response.cookie('player', '1', { maxAge: 60 * 60 * 1000, httpOnly: false });
         }
 
+        let basePage = fs.readFileSync(__dirname + '/resources/basepage.html');
+        let htmlSnippet = fs.readFileSync(__dirname + '/resources/register-form.html')
+
+        let dom = new jsdom.JSDOM(basePage);
+
+        dom.window.document.querySelector('main').innerHTML = '<h1>Väntar på spelare</h1><div class="spinner-border text-muted" div>';
+
+        response.send(dom.serialize()); //trycker tillbaka till klienten
+
+        // TIPS! Skapa en reset -metod, så man resetar kakor pch alla saker på servern
+
     } catch (exeption) {
 
-        response.send(exeption.errorMsg);
+        let basePage = fs.readFileSync(__dirname + '/resources/basepage.html');
+        let htmlSnippet = fs.readFileSync(__dirname + '/resources/register-form.html')
+
+        let dom = new jsdom.JSDOM(basePage);
+
+        dom.window.document.querySelector('main').innerHTML = htmlSnippet;
+        dom.window.document.querySelector('#error').textContent = exeption.errorMsg
+
+        response.send(dom.serialize()); //trycker tillbaka till klienten
+
 
     }
 });
