@@ -1,40 +1,41 @@
 'use strict';
 
-let socket = io();
-let player = null;
-let lastY = null;
+//Globala variabler 
+let socket = io(); // ansluter automatiskt till servern när sidan laddas. KRÄVER AT socket.io-client ÄR LÄNKAD I HTML
+let player = null; // null - sätts till'left' eller 'right' när spelet startar. Används för att veta vilken pad klienten styr 
+let lastY = null; // null . används för att beräkna hur myckey musen har rört sig vertikalt
 
 //Händelse för att ta hand om uppdaterad position på bollen
 socket.on('updateball', function (data) {
-    
+
     let ball = document.getElementById('ball');
-    ball.style.left = data.xpos + 'px';
+    ball.style.left = data.xpos + 'px'; // 
     ball.style.top = data.ypos + 'px';
 
     //Kolla om träff på pad höger      
-    if(data.xpos>=725 && data.xpos<=740) {
-        let padPosition = document.getElementById('rightpad').style.top;
-        padPosition = padPosition.slice(0, -2);
+    if (data.xpos >= 725 && data.xpos <= 740) {
+        let padPosition = document.getElementById('rightpad').style.top; // returnerar en sträng med enheten på tex '160px'
+        padPosition = padPosition.slice(0, -2); // plocka bort 'px' eftersom man inte kan jämföra sträng med tal, blir då '160'
 
-        if(data.ypos>=padPosition && data.ypos<=(parseInt(padPosition)+180)) {
+        if (data.ypos >= padPosition && data.ypos <= (parseInt(padPosition) + 180)) { // gör om strängen '160' till int
             //Spela ping
             document.getElementById('ping').play();
             //Byt håll
-            socket.emit('changedirection',null);
+            socket.emit('changedirection', null);
         }
     }
-    
+
 
     //Vänster pad
-    if(data.xpos<=55 && data.xpos>=40) {
+    if (data.xpos <= 55 && data.xpos >= 40) {
         let padPosition = document.getElementById('leftpad').style.top;
         padPosition = padPosition.slice(0, -2);
 
-        if(data.ypos>=padPosition && data.ypos<=(parseInt(padPosition)+180)) {
+        if (data.ypos >= padPosition && data.ypos <= (parseInt(padPosition) + 180)) {
             //Spela ping
             document.getElementById('ping').play();
             //Byt håll
-            socket.emit('changedirection',null);
+            socket.emit('changedirection', null);
         }
     }
 
@@ -42,9 +43,9 @@ socket.on('updateball', function (data) {
 
 //Händelse för att starta spelet
 socket.on('startgame', function (data) {
-    
+
     //Rensa main
-    document.querySelector('main').innerHTML=null;
+    document.querySelector('main').innerHTML = null;
 
     //Bygg gränssnitt
     buildGUI(data.currentnick, data.opponentnick);
@@ -54,70 +55,70 @@ socket.on('startgame', function (data) {
 
     //Lägg lyssnare på mus
     document.querySelector('main').addEventListener('mousemove', updatePadPosition);
-    player = data.player; 
+    player = data.player;
 
 });
 
 //Händelse för uppdatering av motståndarens pad
 socket.on('updatePadPos', function (data) {
-    
-    if(player=='left') {
+
+    if (player == 'left') {
         document.getElementById('rightpad').style.top = data.Y + 'px';
     }
     else {
         document.getElementById('leftpad').style.top = data.Y + 'px';
     }
-    
+
 });
 
 //Händelse för att hantera game over.
 socket.on('gameover', function (data) {
 
-        //stoppa musik
-        document.getElementById('in-game-music').pause();
+    //stoppa musik
+    document.getElementById('in-game-music').pause();
 
-        //Tabort lyssnare på mus
-        document.querySelector('main').removeEventListener('mousemove', updatePadPosition);
+    //Tabort lyssnare på mus
+    document.querySelector('main').removeEventListener('mousemove', updatePadPosition);
 
-        //Skriv ut vinnare
-        document.querySelector('main h1').textContent = 'Vinnare är ' + data.winner;
+    //Skriv ut vinnare
+    document.querySelector('main h1').textContent = 'Vinnare är ' + data.winner;
 
-        //Lägg till spela-igen knapp
-        let btn = document.createElement('a');
-        let div = document.createElement('div');
-        div.classList.add('w-100','text-center');
+    //Lägg till spela-igen knapp
+    let btn = document.createElement('a');
+    let div = document.createElement('div');
+    div.classList.add('w-100', 'text-center');
 
-        btn.href='/';
-        btn.classList.add('btn','btn-lg','btn-primary');
-        btn.textContent = 'Spela igen?';
-        div.appendChild(btn);
-        document.querySelector('main').insertBefore(div, document.querySelector('main>div'));
+    btn.href = '/';
+    btn.classList.add('btn', 'btn-lg', 'btn-primary');
+    btn.textContent = 'Spela igen?';
+    div.appendChild(btn);
+    document.querySelector('main').insertBefore(div, document.querySelector('main>div'));
 
-        //Ta bort kakor
-        document.cookie = 'player=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    //Ta bort kakor
+    document.cookie = 'player=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
 });
 
 //Händelse för att hantera ping
 socket.on('ping', function (data) {
-    document.getElementById('ping').play(); 
+    document.getElementById('ping').play();
 });
 
 //Funktion för att uppdatera position på Pad'en
 function updatePadPosition(evt) {
-    if(lastY==null) {
+    if (lastY == null) {
         lastY = evt.clientY;
     }
-    else if(lastY != evt.clientY) {
+    else if (lastY != evt.clientY) {
         let delta = lastY - evt.clientY;
         lastY = evt.clientY;
         let padPosition;
-        if(player === 'left') {
+        if (player === 'left') {
             padPosition = document.getElementById('leftpad').style.top;
             padPosition = padPosition.slice(0, -2);
             padPosition = parseInt(padPosition) - parseInt(delta);
-            
-            if(padPosition<0) padPosition = 0;
-            else if( padPosition>320) padPosition = 320;
+
+            if (padPosition < 0) padPosition = 0;
+            else if (padPosition > 320) padPosition = 320;
 
             document.getElementById('leftpad').style.top = padPosition + 'px';
 
@@ -125,23 +126,23 @@ function updatePadPosition(evt) {
             socket.emit('updatePadPos', padPosition);
             //console.log(padPosition);
         }
-        else if(player === 'right') {
+        else if (player === 'right') {
             padPosition = document.getElementById('rightpad').style.top;
             padPosition = padPosition.slice(0, -2);
             padPosition = parseInt(padPosition) - parseInt(delta);
-            
-            if(padPosition<0) padPosition = 0;
-            else if( padPosition>320) padPosition = 320;
+
+            if (padPosition < 0) padPosition = 0;
+            else if (padPosition > 320) padPosition = 320;
 
             document.getElementById('rightpad').style.top = padPosition + 'px';
-            
+
             //Skicka ny padposition till server
             socket.emit('updatePadPos', padPosition);
             //console.log(padPosition);
         }
-        
+
     }
-} 
+}
 
 //Funktion för att bygga gränssnittet med spelplan
 function buildGUI(mynick, opponentnick) {
@@ -162,7 +163,7 @@ function buildGUI(mynick, opponentnick) {
     gameArea.style.border = '1px solid black';
 
     let leftPad = document.createElement('div');
-    leftPad.setAttribute('id','leftpad');
+    leftPad.setAttribute('id', 'leftpad');
     leftPad.style.width = '50px';
     leftPad.style.height = '180px';
     leftPad.style.position = 'absolute';
@@ -173,7 +174,7 @@ function buildGUI(mynick, opponentnick) {
     gameArea.appendChild(leftPad);
 
     let rightPad = document.createElement('div');
-    rightPad.setAttribute('id','rightpad');
+    rightPad.setAttribute('id', 'rightpad');
     rightPad.style.width = '50px';
     rightPad.style.height = '180px';
     rightPad.style.position = 'absolute';
@@ -184,7 +185,7 @@ function buildGUI(mynick, opponentnick) {
     gameArea.appendChild(rightPad);
 
     let ball = document.createElement('div');
-    ball.setAttribute('id','ball');
+    ball.setAttribute('id', 'ball');
     ball.style.width = '20px';
     ball.style.height = '20px';
     ball.style.position = 'absolute';
@@ -195,8 +196,8 @@ function buildGUI(mynick, opponentnick) {
     gameArea.appendChild(ball);
 
     document.querySelector('main').style.display = 'flex';
-    document.querySelector('main').style.height='100%';
-    document.querySelector('main').style.justifyContent='center';
+    document.querySelector('main').style.height = '100%';
+    document.querySelector('main').style.justifyContent = 'center';
     document.querySelector('main').style.alignItems = 'center';
     document.querySelector('main').style.flexWrap = 'wrap';
     document.querySelector('main').appendChild(gameArea);
