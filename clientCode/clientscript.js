@@ -12,21 +12,22 @@ socket.on('updateball', function (data) {
     ball.style.left = data.xpos + 'px'; // 
     ball.style.top = data.ypos + 'px';
 
-    //Kolla om träff på pad höger      
+    //Kolla om träff på pad höger pad      
     if (data.xpos >= 725 && data.xpos <= 740) {
         let padPosition = document.getElementById('rightpad').style.top; // returnerar en sträng med enheten på tex '160px'
         padPosition = padPosition.slice(0, -2); // plocka bort 'px' eftersom man inte kan jämföra sträng med tal, blir då '160'
 
+        // ollar om bollen är inom padens höjd, alltså om det är en träff
         if (data.ypos >= padPosition && data.ypos <= (parseInt(padPosition) + 180)) { // gör om strängen '160' till int
-            //Spela ping
+            //Spela pingljud och..
             document.getElementById('ping').play();
-            //Byt håll
+            //skicka händelsen changedirection till servern så bollen byter håll
             socket.emit('changedirection', null);
         }
     }
 
 
-    //Vänster pad
+    //Kolla om träff på pad vänster pad 
     if (data.xpos <= 55 && data.xpos >= 40) {
         let padPosition = document.getElementById('leftpad').style.top;
         padPosition = padPosition.slice(0, -2);
@@ -41,27 +42,42 @@ socket.on('updateball', function (data) {
 
 });
 
-//Händelse för att starta spelet
+
+// Lyssnar på händelsen 'startgame' som skickas från servern.
+// Servern MÅSTE skicka ett objekt med tre nycklar: 
+// { currentnick, opponentnick, player } — annars blir värdena undefined.
 socket.on('startgame', function (data) {
 
-    //Rensa main
+    // Rensar spelplanen så den är tom innan spelet byggs upp
     document.querySelector('main').innerHTML = null;
 
-    //Bygg gränssnitt
+    // Bygger upp spelgränssnittet med båda spelarnas namn
+    // data.currentnick = spelarens egna namn
+    // data.opponentnick = motståndarens namn
     buildGUI(data.currentnick, data.opponentnick);
 
     //starta musik
     document.getElementById('in-game-music').play();
 
-    //Lägg lyssnare på mus
+    // Aktiverar muslyssnaren — nu kan spelaren styra sin pad
     document.querySelector('main').addEventListener('mousemove', updatePadPosition);
+
+    // Sparar om denna spelare är 'left' eller 'right'
+    // Används senare för att veta vilken pad spelaren styr
     player = data.player;
 
 });
 
-//Händelse för uppdatering av motståndarens pad
+// Lyssnar på händelsen 'updatePadPos' som skickas från servern.
+// Servern tar emot padpositionen från EN spelare och vidarebefordrar till DEN ANDRE.
+// Servern MÅSTE skicka ett objekt med nyckeln Y: { Y: position }
 socket.on('updatePadPos', function (data) {
 
+
+    // Om JAG är vänsterspelaren ska MOTSTÅNDARENS (höger) pad uppdateras
+    // Om JAG är högerspelaren ska MOTSTÅNDARENS (vänster) pad uppdateras
+    // Alltså uppdateras alltid motståndarens pad — aldrig din egen
+    // (din egen pad uppdateras lokalt i updatePadPosition-funktionen)
     if (player == 'left') {
         document.getElementById('rightpad').style.top = data.Y + 'px';
     }
@@ -71,62 +87,83 @@ socket.on('updatePadPos', function (data) {
 
 });
 
-//Händelse för att hantera game over.
+
+// Lyssnar på händelsen 'gameover' som skickas från servern när bollen träffat en vägg.
+// Servern MÅSTE skicka ett objekt med nyckeln winner: { winner: 'nicknamnePåVinnaren' }
 socket.on('gameover', function (data) {
 
     //stoppa musik
     document.getElementById('in-game-music').pause();
 
-    //Tabort lyssnare på mus
+    // Avaktiverar muslyssnaren — spelaren kan inte längre styra sin pad
     document.querySelector('main').removeEventListener('mousemove', updatePadPosition);
 
-    //Skriv ut vinnare
+    // Skriver ut vinnaren i h1-elementet som redan finns i spelplanen
+    // data.winner = nicknamneet på den som vann
     document.querySelector('main h1').textContent = 'Vinnare är ' + data.winner;
 
-    //Lägg till spela-igen knapp
+    // Skapar en "Spela igen"-knapp och lägger till den i spelplanen
     let btn = document.createElement('a');
     let div = document.createElement('div');
     div.classList.add('w-100', 'text-center');
 
-    btn.href = '/';
+    btn.href = '/'; // klick på knappen skickar spelaren tillbaka till startsidan
     btn.classList.add('btn', 'btn-lg', 'btn-primary');
     btn.textContent = 'Spela igen?';
     div.appendChild(btn);
     document.querySelector('main').insertBefore(div, document.querySelector('main>div'));
 
-    //Ta bort kakor
+    // Tar bort player-cookien genom att sätta utgångsdatumet till en tid i det förflutna
+    // VIKTIGT: fungerar bara om cookien är satt med httpOnly: false på servern!
+    // Om httpOnly: true kan JavaScript inte nå cookien och den tas aldrig bort
     document.cookie = 'player=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
 });
 
-//Händelse för att hantera ping
+// Lyssnar på händelsen 'ping' som skickas från servern.
+// Servern skickar 'ping' när bollen studsar mot tak eller golv (ballY <= 0 || ballY >= 480)
+// Detta är redan skrivet i den förskrivna timeout()-funktionen i app.js
+// Spelar upp ett pingljud på klienten som återkoppling till spelaren
 socket.on('ping', function (data) {
     document.getElementById('ping').play();
 });
 
-//Funktion för att uppdatera position på Pad'en
+// Funktion som körs varje gång spelaren rör musen (aktiverad av mousemove-lyssnaren i startgame).
+// Beräknar hur mycket musen rört sig och uppdaterar padens position därefter.
 function updatePadPosition(evt) {
+    // Första gången musen rör sig — spara Y-positionen som referenspunkt
     if (lastY == null) {
         lastY = evt.clientY;
     }
     else if (lastY != evt.clientY) {
+
+        // Beräkna hur många pixlar musen rört sig sedan förra gången
         let delta = lastY - evt.clientY;
+
+        // Uppdatera referenspunkten till nuvarande musposition
         lastY = evt.clientY;
         let padPosition;
         if (player === 'left') {
+            // Hämta padens nuvarande Y-position och ta bort 'px'
             padPosition = document.getElementById('leftpad').style.top;
             padPosition = padPosition.slice(0, -2);
+            // Flytta paden med delta — musen upp = paden upp, musen ned = paden ned
             padPosition = parseInt(padPosition) - parseInt(delta);
 
+            // Begränsa paden så den inte åker utanför spelplanen
+            // Min 0 (överkant) och max 320 (underkant — 500px höjd minus 180px pad)
             if (padPosition < 0) padPosition = 0;
             else if (padPosition > 320) padPosition = 320;
 
+            // Uppdatera padens position på skärmen lokalt
             document.getElementById('leftpad').style.top = padPosition + 'px';
 
-            //Skicka ny padposition till server
+            // Skicka den nya positionen till servern som ett tal (inte objekt!)
+            // Servern vidarebefordrar det till motståndaren som { Y: padPosition }
             socket.emit('updatePadPos', padPosition);
             //console.log(padPosition);
         }
         else if (player === 'right') {
+            // Exakt samma logik som för vänster — fast för höger pad
             padPosition = document.getElementById('rightpad').style.top;
             padPosition = padPosition.slice(0, -2);
             padPosition = parseInt(padPosition) - parseInt(delta);
@@ -136,7 +173,6 @@ function updatePadPosition(evt) {
 
             document.getElementById('rightpad').style.top = padPosition + 'px';
 
-            //Skicka ny padposition till server
             socket.emit('updatePadPos', padPosition);
             //console.log(padPosition);
         }
@@ -144,16 +180,21 @@ function updatePadPosition(evt) {
     }
 }
 
-//Funktion för att bygga gränssnittet med spelplan
+// Funktion som bygger upp hela spelgränssnittet i webbläsaren.
+// Anropas från startgame-händelsen med spelarens egna nick och motståndarens nick.
 function buildGUI(mynick, opponentnick) {
+
+    // Gör html och body 100% höga så spelplanen fyller hela skärmen
     document.querySelector('html').style.height = '100%';
     document.querySelector('body').style.height = '100%';
 
+    // Skapar en rubrik med båda spelarnas namn, t.ex. "Sara vs. Johan"
     let h1 = document.createElement('h1');
     h1.textContent = mynick + ' vs. ' + opponentnick;
     h1.classList.add('text-center', 'w-100');
     document.querySelector('main').appendChild(h1);
 
+    // Skapar spelplanen — en grå ruta som är 800x500px
     let gameArea = document.createElement('div');
     gameArea.style.width = '800px';
     gameArea.style.height = '500px';
@@ -162,6 +203,8 @@ function buildGUI(mynick, opponentnick) {
     gameArea.style.position = 'relative';
     gameArea.style.border = '1px solid black';
 
+    // Skapar vänster pad — svart rektangel 50x180px, placerad 5px från vänsterkanten
+    // Startar på y=160px (ungefär i mitten av spelplanen)
     let leftPad = document.createElement('div');
     leftPad.setAttribute('id', 'leftpad');
     leftPad.style.width = '50px';
@@ -173,6 +216,7 @@ function buildGUI(mynick, opponentnick) {
 
     gameArea.appendChild(leftPad);
 
+    // Skapar höger pad — identisk med vänster men placerad 5px från högerkanten
     let rightPad = document.createElement('div');
     rightPad.setAttribute('id', 'rightpad');
     rightPad.style.width = '50px';
@@ -184,6 +228,7 @@ function buildGUI(mynick, opponentnick) {
 
     gameArea.appendChild(rightPad);
 
+    // Skapar bollen — svart kvadrat 20x20px, startposition i mitten av spelplanen
     let ball = document.createElement('div');
     ball.setAttribute('id', 'ball');
     ball.style.width = '20px';
@@ -195,6 +240,7 @@ function buildGUI(mynick, opponentnick) {
 
     gameArea.appendChild(ball);
 
+    // Centrerar spelplanen i main med flexbox
     document.querySelector('main').style.display = 'flex';
     document.querySelector('main').style.height = '100%';
     document.querySelector('main').style.justifyContent = 'center';
