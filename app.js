@@ -70,11 +70,44 @@ app.get('/', function (request, response) {
     // serialiseras tillbaka till HTML-strängen när man anropar dom.serialize().
     let dom = new jsdom.JSDOM(basePage);
 
+
+
     // Sätter in formuläret inuti <main>-elementet i den virtuella DOM:en.
     // OBS: använd alltid innerHTML för att sätta in HTML-strängar,
     // och setAttribute() för att sätta värden på enskilda element — inte .value!
     // .value serialiseras inte tillbaka av jsdom och försvinner ur HTML-svaret.
     dom.window.document.querySelector('main').innerHTML = htmlSnippet;
+
+    // ----- DEL 4 VG-nivå--------
+    // Skapar en ny div som ska innehålla checkboxen och dess label
+    let formgroup = dom.window.document.createElement('div');
+    formgroup.classList.add('formgroup', 'mb-3'); //Bootstrap, behövs inte 
+
+    // Skapar en label med texten som visas bredvid checkboxen
+    // 'for' kopplar labeln till checkboxen via dess id — klick på texten markerar checkboxen
+    let label = dom.window.document.createElement('label');
+    label.setAttribute('for', 'increase');
+    label.classList.add('ms-2') //Bootstrap;
+    label.textContent = 'Öka bollens fart var 10:e sekund';
+
+    let br = dom.window.document.createElement('br');
+
+    // Skapar själva checkboxen
+    // name="increase" gör att värdet skickas med i POST-requesten när formuläret skickas
+    // Om checkboxen är ikryssad skickas increase=on, om den inte är ikryssad skickas ingenting
+    let checkbox = dom.window.document.createElement('input');
+    checkbox.setAttribute('type', 'checkbox');
+    checkbox.setAttribute('id', 'increase');
+    checkbox.setAttribute('name', 'increase');
+
+    // Lägger checkbox och label inuti formgroup-diven
+    formgroup.appendChild(checkbox);
+    formgroup.appendChild(label);
+
+    // Sätter in formgroup INNAN knapp-diven (div.text-right) i formuläret
+    // insertBefore(NYTT ELEMENT, REFERENSELEMENT) — det nya elementet hamnar precis ovanför referenselementet
+    // Utan detta hade checkboxen hamnat sist i formuläret, efter knappen
+    dom.window.document.querySelector('form').insertBefore(formgroup, dom.window.document.querySelector('div.text-right'));
 
     // Konverterar den virtuella DOM:en tillbaka till en HTML-sträng och skickar till klienten
     response.send(dom.serialize());
@@ -138,18 +171,34 @@ app.post('/play', function (request, response) {
             player.playerTwoNick = nickname;
             player.playerTwoSpeed = speed;
             response.cookie('player', '2', { maxAge: 60 * 60 * 1000, httpOnly: false }); //default är att klienten kan manipulera cookies så här behövs inte göra nåt 
+
+            // VG DEL 4
+            // Om checkboxen skickades med i formuläret (den var ikryssad)
+            if (request.body.increase != null) {
+                // Dubbelkollar att värdet verkligen är 'on'
+                if (request.body.increase == 'on') {
+                    player.playerTwoEnableSpeed = true;
+                }
+            }
+
         } else {
             // OBS: här borde man också kontrollera om både spelare 1 och 2 redan är med
             // Vad händer om en tredje spelare försöker ansluta?
             player.playerOneNick = nickname;
             player.playerOneSpeed = speed;
             response.cookie('player', '1', { maxAge: 60 * 60 * 1000, httpOnly: false });
+
+            // VG DEL 4
+            if (request.body.increase != null) {
+                if (request.body.increase == 'on') {
+                    player.playerOneEnableSpeed = true;
+                }
+            }
         }
 
         // Laddar in basepage.html igen och visar en väntesida med spinner
         // medan den andra spelaren registrerar sig
         let basePage = fs.readFileSync(__dirname + '/resources/basepage.html');
-        let htmlSnippet = fs.readFileSync(__dirname + '/resources/register-form.html')
 
         let dom = new jsdom.JSDOM(basePage);
 
@@ -179,8 +228,34 @@ app.post('/play', function (request, response) {
         dom.window.document.querySelector('#nickname').setAttribute('value', request.body.nickname); //Tänk hårdkodad HTML kod!
         dom.window.document.querySelector('#speed').setAttribute('value', request.body.speed);
 
-        response.send(dom.serialize()); //trycker tillbaka till klienten
 
+        // ----- DEL 4 VG-nivå --------
+        // Checkboxen måste läggas till manuellt här i catch-blocket också.
+        // När ett valideringsfel inträffar byggs formuläret upp från scratch med jsdom.
+        // Utan denna kod skulle checkboxen försvinna när formuläret visas igen efter ett fel,
+        // eftersom catch inte vet vad GET-routen lade till tidigare
+        let formgroup = dom.window.document.createElement('div');
+        formgroup.classList.add('formgroup', 'mb-3');
+
+        let label = dom.window.document.createElement('label');
+        label.setAttribute('for', 'increase');
+        label.classList.add('ms-2') //Bootstrap;
+        label.textContent = 'Öka bollens fart var 10:e sekund';
+
+        let br = dom.window.document.createElement('br');
+
+        let checkbox = dom.window.document.createElement('input');
+
+        checkbox.setAttribute('type', 'checkbox');
+        checkbox.setAttribute('id', 'increase');
+        checkbox.setAttribute('name', 'increase');
+
+        formgroup.appendChild(checkbox);
+        formgroup.appendChild(label);
+
+        dom.window.document.querySelector('form').insertBefore(formgroup, dom.window.document.querySelector('div.text-right'));
+
+        response.send(dom.serialize());
     }
 });
 
@@ -218,22 +293,111 @@ io.on('connection', function (socket) {
     } else {
         player.playerTwoSocketId = socket.id;
     }
-});
 
+    // Kontrollerar om båda spelarna har registrerat sig
+    // Spelet startar inte förrän både spelare 1 och spelare 2 har ett nickname
+    if (player.playerOneNick != null && player.playerTwoNick != null) {
+        // Beräknar hur ofta bollen ska uppdateras (i millisekunder)
+        // Ju högre speed spelarna valde → kortare interval → snabbare boll
+        // Exempel: båda valde 3 → 80 - ((3+3)*10) = 20ms mellan varje uppdatering
+        game.timeInterval = 80 - ((player.playerOneSpeed + player.playerTwoSpeed) * 10)
 
+        // Bygger ihop data-objektet som skickas till spelare 1
+        // currentnick = spelarens egna namn, opponentnick = motståndarens namn
+        // player: 'left' betyder att spelare 1 styr vänster pad
+        let data = {
+            currentnick: player.playerOneNick,
+            opponentnick: player.playerTwoNick,
+            player: 'left'
+        }
+        // Skickar startgame enbart till spelare 1 via deras unika socket.id
+        // io.to(id).emit() skickar bara till en specifik klient — inte alla
+        io.to(player.playerOneSocketId).emit('startgame', data);
 
-/*
-//Ta emot changedirection-händelse från klient
-socket.on('changedirection', function () {
-    if (game.directionLock < 0) {
-        game.deltaX = game.deltaX * -1;
-        //lägg på lås så inte riktning ändras igen inom 5 positionsuppdateringar.
-        game.directionLock = 5;
+        // Bygger om data-objektet för spelare 2 — nicknamnen är spegelvända!
+        // player: 'right' betyder att spelare 2 styr höger pad
+        data = {
+            currentnick: player.playerTwoNick,
+            opponentnick: player.playerOneNick,
+            player: 'right'
+        }
+
+        // Skickar startgame enbart till spelare 2 via deras unika socket.id
+        io.to(player.playerTwoSocketId).emit('startgame', data);
+
+        // Startar bollrörelsen — setTimeout anropar timeout() efter timeInterval millisekunder
+        // game.timerId sparas så vi kan stoppa timern med clearTimeout() vid game over
+        game.timerId = setTimeout(timeout, game.timeInterval);
+
+        // VG DEL - ökad bollhastighet
+        // Aktiveras bara om BÅDA spelarna kryssade i checkboxen vid registrering
+        // Om bara en spelare kryssade i händer ingenting
+        if (player.playerOneEnableSpeed === true && player.playerTwoEnableSpeed == true) {
+            game.increaseSpeedEnabled = true;
+            // Startar en timer i game.js som ökar bollens hastighet var 10:e sekund
+            game.increaseSpeed();
+        }
     }
+
+    //Ta emot changedirection-händelse från klient (fanns med från start)
+    socket.on('changedirection', function () {
+        if (game.directionLock < 0) {
+            game.deltaX = game.deltaX * -1;
+            //lägg på lås så inte riktning ändras igen inom 5 positionsuppdateringar.
+            game.directionLock = 5;
+        }
+    });
+
+
+    // Lyssnar efter när en klient skickar sin padposition till servern.
+    // Servern kollar vem som skickade och vidarebefordrar positionen till motståndaren
+    // så att båda spelarna kan se varandras pads röra sig i realtid. 
+    socket.on('updatePadPos', function (data) {
+
+        if (socket.id === player.playerOneSocketId) {
+            io.to(player.playerTwoSocketId).emit('updatePadPos', { Y: data });
+        }
+        else if (socket.id === player.playerTwoSocketId) {
+            io.to(player.playerOneSocketId).emit('updatePadPos', { Y: data });
+        }
+    });
+
 });
 
+// VG -DEL
+// Funktion som kontrollerar om spelet är slut efter varje bolluppdatering.
+// Anropas från timeout() efter varje gång bollen har rört sig.
+function checkForGameOver() {
 
-//Funktion för att beräkna bollens rörelse
+    // Kollar om bollen har passerat vänster eller höger vägg
+    // Spelplanen är 800px bred — väggarna är vid x=0 (vänster) och x=790 (höger)
+    if (game.ballX <= 0 || game.ballX >= 790) {
+        // Bollen passerade höger vägg — spelare 2 missade sin pad — spelare 1 vinner
+        if (game.ballX >= 790) {
+            // Spelare 1 har vunnit. io.emit() skickar till ALLA anslutna klienter — båda ska få veta att spelet är slut
+            io.emit('gameover', { winner: player.playerOneNick }); // emit skickar till alla ansluta 
+        }
+        else {
+            // Bollen passerade vänster vägg — spelare 1 missade sin pad — spelare 2 vinner
+            io.emit('gameover', { winner: player.playerTwoNick });
+        }
+
+        // Återställer spel- och spelarobjekten till sina startvärden
+        // så att en ny omgång kan påbörjas
+        game.reset();
+        player.reset();
+    }
+    else {
+        // Ingen vägg träffad — spelet fortsätter
+        // Startar en ny timer som anropar timeout() igen efter timeInterval millisekunder
+        // Detta skapar en loop: timeout() → checkForGameOver() → timeout() → ...
+        // som håller bollen rörande tills någon träffar en vägg
+        game.timerId = setTimeout(timeout, game.timeInterval);
+    }
+}
+
+
+//Funktion för att beräkna bollens rörelse (fanns med från start)
 function timeout() {
     //uppdatera ballposition
     game.ballX = game.ballX + game.deltaX;
@@ -249,8 +413,4 @@ function timeout() {
     //Ropa på funktion för att kontrollera om spelet är slut
     checkForGameOver();
 }
-
-*/
-
-
 
